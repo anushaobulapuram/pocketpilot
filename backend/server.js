@@ -19,6 +19,7 @@ connectDB();
 app.use('/api/auth', authRoutes);
 app.use('/api/goals', goalRoutes);
 app.use('/api/finance', financeRoutes);
+app.use('/api/finance/voice-plan', voicePlanRoutes);
 
 const PORT = 5000;
 app.listen(PORT, () => {

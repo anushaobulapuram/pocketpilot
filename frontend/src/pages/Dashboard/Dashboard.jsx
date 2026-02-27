@@ -6,6 +6,7 @@ import { toast } from 'react-toastify';
 import { Mic, MicOff } from 'lucide-react';
 import SmsSimulator from '../../components/SmsSimulator';
 import VoiceBudgetModal from '../../components/VoiceBudgetModal';
+import VoiceBudgetPlanner from '../../components/VoiceBudgetPlanner';
 
 const Dashboard = () => {
     const { token } = useContext(AuthContext);
@@ -25,6 +26,7 @@ const Dashboard = () => {
     const [isListening, setIsListening] = useState(false);
     const [smsText, setSmsText] = useState('');
     const [isVoiceBudgetOpen, setIsVoiceBudgetOpen] = useState(false);
+    const [isBudgetPlannerOpen, setIsBudgetPlannerOpen] = useState(false);
 
     // --- Voice Assistant State Machine ---
     const [voiceState, setVoiceState] = useState({
@@ -632,14 +634,24 @@ const Dashboard = () => {
                         <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
                             {voiceState.isActive ? 'Conversational AI' : t('add_transaction')}
                         </h3>
-                        <button
-                            type="button"
-                            onClick={handleVoiceRecordToggle}
-                            className={`p-2.5 rounded-full transition-all flex items-center justify-center shadow-sm ${voiceState.isActive ? 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 dark:bg-red-900/30 dark:border-red-800' : 'bg-white dark:bg-gray-800 text-blue-600 border border-gray-200 dark:border-gray-700 hover:bg-blue-50 hover:text-blue-700'}`}
-                            title="Voice Financial Assistant"
-                        >
-                            {voiceState.isActive ? <MicOff size={20} /> : <Mic size={20} />}
-                        </button>
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setIsBudgetPlannerOpen(true)}
+                                className="p-2.5 rounded-full transition-all flex items-center justify-center shadow-sm bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-800/50"
+                                title="Voice Budget Planner"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-calculator"><rect width="16" height="20" x="4" y="2" rx="2" /><line x1="8" x2="16" y1="6" y2="6" /><line x1="16" x2="16" y1="14" y2="18" /><path d="M16 10h.01" /><path d="M12 10h.01" /><path d="M8 10h.01" /><path d="M12 14h.01" /><path d="M8 14h.01" /><path d="M12 18h.01" /><path d="M8 18h.01" /></svg>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleVoiceRecordToggle}
+                                className={`p-2.5 rounded-full transition-all flex items-center justify-center shadow-sm ${voiceState.isActive ? 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 dark:bg-red-900/30 dark:border-red-800' : 'bg-white dark:bg-gray-800 text-blue-600 border border-gray-200 dark:border-gray-700 hover:bg-blue-50 hover:text-blue-700'}`}
+                                title="Voice Financial Assistant"
+                            >
+                                {voiceState.isActive ? <MicOff size={20} /> : <Mic size={20} />}
+                            </button>
+                        </div>
                     </div>
 
                     {voiceState.isActive ? (
@@ -923,6 +935,11 @@ const Dashboard = () => {
                     setIsVoiceBudgetOpen(false);
                     fetchData();
                 }}
+            />
+            <VoiceBudgetPlanner
+                isOpen={isBudgetPlannerOpen}
+                onClose={() => setIsBudgetPlannerOpen(false)}
+                onPlanSaved={fetchData}
             />
         </div>
     );

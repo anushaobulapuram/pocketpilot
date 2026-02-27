@@ -3,26 +3,36 @@ import { AuthContext } from '../../context/AuthContext';
 import { LanguageContext } from '../../context/LanguageContext';
 import { Link } from 'react-router-dom';
 import { Sliders, Calendar } from 'lucide-react';
+import DailySnapshotModal from '../../components/DailySnapshotModal';
 
 const Profile = () => {
     const { user, token } = useContext(AuthContext);
     const { t } = useContext(LanguageContext);
     const [history, setHistory] = useState([]);
+    const [selectedSnapshotDate, setSelectedSnapshotDate] = useState(null);
+    const [isSnapshotOpen, setIsSnapshotOpen] = useState(false);
 
     useEffect(() => {
-        const fetchHistory = async () => {
-            try {
-                const res = await fetch('http://localhost:5000/api/finance/daily-history', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    setHistory(data);
-                }
-            } catch (err) { }
-        };
         fetchHistory();
     }, [token]);
+
+    const fetchHistory = async () => {
+        try {
+            const res = await fetch('http://localhost:5000/api/finance/daily-history', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setHistory(data);
+            }
+        } catch (err) { }
+    };
+
+    const handleDateClick = (date) => {
+        if (!date) return;
+        setSelectedSnapshotDate(date);
+        setIsSnapshotOpen(true);
+    };
 
     if (!user) return null;
 
@@ -128,8 +138,9 @@ const Profile = () => {
                                         return (
                                             <div
                                                 key={index}
-                                                className={`w-3 h-3 rounded-sm ${defaultBg} transition-all duration-200 hover:ring-2 hover:ring-blue-400 hover:scale-125 cursor-help`}
-                                                title={`Date: ${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}\nStatus: ${status.text}`}
+                                                onClick={() => handleDateClick(date)}
+                                                className={`w-3 h-3 rounded-sm ${defaultBg} transition-all duration-200 hover:ring-2 hover:ring-blue-400 hover:scale-125 cursor-pointer`}
+                                                title={`Date: ${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}\nStatus: ${status.text}\nClick to view activity`}
                                             ></div>
                                         );
                                     })}
@@ -151,6 +162,17 @@ const Profile = () => {
                     </div>
                 </div>
             </section>
+
+            <DailySnapshotModal
+                isOpen={isSnapshotOpen}
+                onClose={() => setIsSnapshotOpen(false)}
+                date={selectedSnapshotDate}
+                token={token}
+                onUpdate={() => {
+                    fetchHistory();
+                    window.dispatchEvent(new Event('transaction-updated'));
+                }}
+            />
         </div>
     );
 };

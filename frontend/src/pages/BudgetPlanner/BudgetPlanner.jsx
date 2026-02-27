@@ -16,6 +16,30 @@ const BudgetPlanner = () => {
     const [plan, setPlan] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
 
+    // Calendar Simulation State
+    const currentDate = new Date();
+    const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1); // 1-12
+    const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
+    const [transactions, setTransactions] = useState([]);
+
+    const months = [
+        { value: 1, label: t('month_jan', 'January') },
+        { value: 2, label: t('month_feb', 'February') },
+        { value: 3, label: t('month_mar', 'March') },
+        { value: 4, label: t('month_apr', 'April') },
+        { value: 5, label: t('month_may', 'May') },
+        { value: 6, label: t('month_jun', 'June') },
+        { value: 7, label: t('month_jul', 'July') },
+        { value: 8, label: t('month_aug', 'August') },
+        { value: 9, label: t('month_sep', 'September') },
+        { value: 10, label: t('month_oct', 'October') },
+        { value: 11, label: t('month_nov', 'November') },
+        { value: 12, label: t('month_dec', 'December') }
+    ];
+
+    const currentYear = new Date().getFullYear();
+    const years = Array.from({ length: 5 }, (_, i) => currentYear - i); // Last 5 years
+
     const getVoiceLang = (appLang) => {
         switch (appLang) {
             case 'te': return 'te-IN';
@@ -39,6 +63,21 @@ const BudgetPlanner = () => {
         };
         fetchDomains();
     }, [token, t]);
+
+    // Fetch transactions when month or year changes
+    useEffect(() => {
+        const fetchTransactions = async () => {
+            try {
+                const res = await axios.get(`http://localhost:5000/api/finance/transactions?month=${selectedMonth}&year=${selectedYear}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                setTransactions(res.data);
+            } catch (error) {
+                console.error('Failed to fetch transactions', error);
+            }
+        };
+        fetchTransactions();
+    }, [selectedMonth, selectedYear, token]);
 
     const handleDomainToggle = (domainId) => {
         if (selectedDomains.includes(domainId)) {
@@ -67,19 +106,34 @@ const BudgetPlanner = () => {
 
         const selectedDomainData = domains.filter(d => selectedDomains.includes(d.id));
 
-        let totalExpected = 0;
-        selectedDomainData.forEach(d => {
-            totalExpected += (d.expected_amount || 0);
+        // Calculate historical spending weights based on the fetched transactions for that month
+        const expenses = transactions.filter(t => t.type === 'expense' && selectedDomains.includes(t.domain_id));
+
+        let totalHistoricalSpent = 0;
+        const spendingPerDomain = {};
+
+        // Initialize with 0
+        selectedDomains.forEach(id => {
+            spendingPerDomain[id] = 0;
+        });
+
+        // Sum up expenses per domain
+        expenses.forEach(tx => {
+            if (spendingPerDomain[tx.domain_id] !== undefined) {
+                spendingPerDomain[tx.domain_id] += tx.amount;
+                totalHistoricalSpent += tx.amount;
+            }
         });
 
         const dailyTotal = budget / numDays;
 
         const breakdown = selectedDomainData.map(d => {
             let proportion = 0;
-            if (totalExpected > 0) {
-                proportion = (d.expected_amount || 0) / totalExpected;
+            // Use historical proportional weighting if data exists, otherwise fallback to equal split
+            if (totalHistoricalSpent > 0) {
+                proportion = spendingPerDomain[d.id] / totalHistoricalSpent;
             } else {
-                proportion = 1 / selectedDomainData.length; // Equal split fallback
+                proportion = 1 / selectedDomainData.length;
             }
 
             const dailyLimit = dailyTotal * proportion;
@@ -88,12 +142,16 @@ const BudgetPlanner = () => {
             return {
                 domainId: d.id,
                 domainName: d.name,
+                historicalSpent: spendingPerDomain[d.id], // Optional, to see what was used
                 dailyLimit: Math.round(dailyLimit),
                 totalLimit: Math.round(totalLimit)
             };
         });
 
-        setPlan(breakdown);
+        setPlan({
+            breakdown,
+            isFallback: totalHistoricalSpent === 0
+        });
     };
 
     const savePlan = async () => {
@@ -104,7 +162,7 @@ const BudgetPlanner = () => {
                 totalBudget: parseFloat(totalBudget),
                 days: parseInt(days, 10),
                 domains: selectedDomains,
-                planBreakdown: plan
+                planBreakdown: plan.breakdown
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -134,13 +192,41 @@ const BudgetPlanner = () => {
                 <div className="bg-indigo-100 dark:bg-indigo-900/50 p-3 rounded-xl">
                     <Calculator className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
                 </div>
-                <div>
+                <div className="flex-1">
                     <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
                         {t('budget_planner') || 'Budget Planner'}
                     </h2>
                     <p className="text-gray-600 dark:text-gray-400">
                         {t('budget_planner_desc') || 'Plan your spending across domains for a specific timeframe.'}
                     </p>
+                </div>
+
+                {/* Calendar / Month Selector for Simulation */}
+                <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <select
+                        value={selectedMonth}
+                        onChange={(e) => {
+                            setSelectedMonth(Number(e.target.value));
+                            setPlan(null); // Reset plan on month change
+                        }}
+                        className="bg-transparent text-sm font-medium text-gray-700 dark:text-gray-200 outline-none cursor-pointer p-1"
+                    >
+                        {months.map(m => (
+                            <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                    </select>
+                    <select
+                        value={selectedYear}
+                        onChange={(e) => {
+                            setSelectedYear(Number(e.target.value));
+                            setPlan(null); // Reset plan on year change
+                        }}
+                        className="bg-transparent text-sm font-medium text-gray-700 dark:text-gray-200 outline-none cursor-pointer p-1"
+                    >
+                        {years.map(y => (
+                            <option key={y} value={y}>{y}</option>
+                        ))}
+                    </select>
                 </div>
             </div>
 
@@ -219,9 +305,12 @@ const BudgetPlanner = () => {
 
                     {plan ? (
                         <div className="flex-1 flex flex-col">
-                            <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-4 mb-6 border border-indigo-100 dark:border-indigo-800/30">
-                                <p className="text-sm text-indigo-800 dark:text-indigo-300">
-                                    {t('plan_summary') || 'Proportional split based on domain budgets across'} <span className="font-bold">{days}</span> {t('days').toLowerCase() || 'days'} {t('for') || 'for'} <span className="font-bold">₹{totalBudget}</span>.
+                            <div className={`rounded-xl p-4 mb-6 border ${plan.isFallback ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-800/30' : 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-100 dark:border-indigo-800/30'}`}>
+                                <p className={`text-sm ${plan.isFallback ? 'text-amber-800 dark:text-amber-300' : 'text-indigo-800 dark:text-indigo-300'}`}>
+                                    {plan.isFallback
+                                        ? (t('plan_fallback_notice') || `No spending data found for ${months.find(m => m.value === selectedMonth)?.label} ${selectedYear}. Falling back to an equal distribution.`)
+                                        : (t('plan_historical_notice') || `Suggested spending plan based on your previous spending behavior from ${months.find(m => m.value === selectedMonth)?.label} ${selectedYear}.`)
+                                    }
                                 </p>
                             </div>
 
@@ -235,7 +324,7 @@ const BudgetPlanner = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                                        {plan.map(p => (
+                                        {plan.breakdown.map(p => (
                                             <tr key={p.domainId} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                                                 <td className="py-4 px-2 font-medium text-gray-900 dark:text-white">
                                                     {p.domainName}

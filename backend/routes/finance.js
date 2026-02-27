@@ -43,7 +43,7 @@ router.post('/domains', authenticate, async (req, res) => {
 
 // Transactions
 router.post('/transactions', authenticate, async (req, res) => {
-    const { domain_id, goal_id, amount, type, description, source } = req.body;
+    const { domain_id, goal_id, amount, type, description, source, date } = req.body;
 
     if (!amount || !type) return res.status(400).json({ error: 'Amount and type are required' });
     if (type === 'expense' && !domain_id) return res.status(400).json({ error: 'Category is required for expense' });
@@ -56,7 +56,8 @@ router.post('/transactions', authenticate, async (req, res) => {
             amount,
             type,
             source: source || 'manual',
-            description: description || ''
+            description: description || '',
+            date: date ? new Date(date) : Date.now()
         });
         await newTx.save();
         res.status(201).json({ id: newTx._id, message: 'Transaction added' });
@@ -105,7 +106,16 @@ router.post('/transactions/sms', authenticate, async (req, res) => {
 
 router.get('/transactions', authenticate, async (req, res) => {
     try {
-        const transactions = await Transaction.find({ user: req.user.id })
+        const { month, year } = req.query;
+        let query = { user: req.user.id };
+
+        if (month && year) {
+            const startDate = new Date(year, month - 1, 1);
+            const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+            query.date = { $gte: startDate, $lte: endDate };
+        }
+
+        const transactions = await Transaction.find(query)
             .populate('domain', 'name')
             .sort({ date: -1 });
 
@@ -116,9 +126,48 @@ router.get('/transactions', authenticate, async (req, res) => {
             date: t.date,
             source: t.source || 'manual',
             description: t.description,
-            domain_name: t.domain ? t.domain.name : '-'
+            domain_name: t.domain ? t.domain.name : '-',
+            domain_id: t.domain ? t.domain._id : null
         })));
     } catch (err) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Edit Transaction
+router.put('/transactions/:id', authenticate, async (req, res) => {
+    const { amount, type, domain_id, description } = req.body;
+
+    if (amount === undefined || !type) return res.status(400).json({ error: 'Amount and type are required' });
+    if (type === 'expense' && !domain_id) return res.status(400).json({ error: 'Category is required for expense' });
+
+    try {
+        const transaction = await Transaction.findOne({ _id: req.params.id, user: req.user.id });
+        if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
+
+        transaction.amount = Number(amount);
+        transaction.type = type;
+        transaction.domain = type === 'expense' ? domain_id : null;
+        if (description !== undefined) transaction.description = description;
+
+        await transaction.save();
+
+        res.json({ message: 'Transaction updated successfully', transaction });
+    } catch (err) {
+        console.error("Edit Transaction Error:", err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Delete Transaction
+router.delete('/transactions/:id', authenticate, async (req, res) => {
+    try {
+        const transaction = await Transaction.findOneAndDelete({ _id: req.params.id, user: req.user.id });
+        if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
+
+        res.json({ message: 'Transaction deleted successfully' });
+    } catch (err) {
+        console.error("Delete Transaction Error:", err);
         res.status(500).json({ error: 'Server error' });
     }
 });

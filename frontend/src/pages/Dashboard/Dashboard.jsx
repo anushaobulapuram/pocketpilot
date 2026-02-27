@@ -753,7 +753,7 @@ const Dashboard = () => {
                             )}
                             <input
                                 type="text"
-                                placeholder={t('description')}
+                                placeholder={t('description') || 'Description'}
                                 value={description}
                                 onChange={e => setDescription(e.target.value)}
                                 className="form-input w-full bg-white dark:bg-gray-800"

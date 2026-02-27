@@ -12,8 +12,17 @@ const smsTemplates = [
     "₹1200 debited from your A/c for Uber rides."
 ];
 
+const getVoiceLang = (appLang) => {
+    switch (appLang) {
+        case 'te': return 'te-IN';
+        case 'hi': return 'hi-IN';
+        case 'en':
+        default: return 'en-IN';
+    }
+};
+
 const SmsSimulator = ({ onComplete, domains }) => {
-    const { t } = useContext(LanguageContext);
+    const { t, lang } = useContext(LanguageContext);
     const [isOpen, setIsOpen] = useState(false);
     const [currentSms, setCurrentSms] = useState('');
     const [detectedData, setDetectedData] = useState(null);
@@ -75,14 +84,21 @@ const SmsSimulator = ({ onComplete, domains }) => {
 
             // Voice Feedback
             if (detectedData.type === 'income') {
-                const utterance = new SpeechSynthesisUtterance(`Income of ₹${detectedData.amount} added successfully.`);
+                const utterance = new SpeechSynthesisUtterance(t('sms_voice_income', detectedData.amount));
+                utterance.lang = getVoiceLang(lang);
                 window.speechSynthesis.speak(utterance);
             } else if (detectedData.type === 'expense' && domains) {
                 const domain = domains.find(d => d.id === selectedCategory);
                 if (domain && domain.expected_amount > 0) {
                     const newSpent = domain.spent_amount + detectedData.amount;
                     const percentageUsed = Math.round((newSpent / domain.expected_amount) * 100);
-                    const utterance = new SpeechSynthesisUtterance(`You have used ${percentageUsed} percent of your ${domain.name} budget.`);
+
+                    const part1 = t('voice_strict_monthly_budget', domain.expected_amount.toString());
+                    const part2 = t('voice_strict_budget_used', percentageUsed.toString());
+                    const message = `${part1} ${part2}`;
+
+                    const utterance = new SpeechSynthesisUtterance(message);
+                    utterance.lang = getVoiceLang(lang);
                     window.speechSynthesis.speak(utterance);
                 }
             }

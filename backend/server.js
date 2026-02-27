@@ -6,6 +6,7 @@ const connectDB = require('./database');
 const authRoutes = require('./routes/auth');
 const goalRoutes = require('./routes/goals');
 const financeRoutes = require('./routes/finance');
+const voicePlanRoutes = require('./routes/voicePlanRoutes');
 
 const app = express();
 

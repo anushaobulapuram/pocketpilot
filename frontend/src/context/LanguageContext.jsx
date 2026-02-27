@@ -30,8 +30,20 @@ export const LanguageProvider = ({ children }) => {
         return text;
     };
 
+    // Function to translate in a dynamically provided language (specifically for Voice overrides)
+    const tVoice = (targetLang, key, ...args) => {
+        let text = translations[targetLang]?.[key] || translations['en']?.[key] || key;
+
+        if (args.length > 0) {
+            args.forEach((arg, index) => {
+                text = text.replace(new RegExp(`\\{${index}\\}`, 'g'), arg);
+            });
+        }
+        return text;
+    };
+
     return (
-        <LanguageContext.Provider value={{ lang, setLang, t }}>
+        <LanguageContext.Provider value={{ lang, setLang, t, tVoice }}>
             {children}
         </LanguageContext.Provider>
     );

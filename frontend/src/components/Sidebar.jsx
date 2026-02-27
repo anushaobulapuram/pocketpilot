@@ -2,7 +2,7 @@ import { useContext } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { LanguageContext } from '../context/LanguageContext';
-import { LayoutDashboard, FileText, Target, User, Settings, HelpCircle, LogOut } from 'lucide-react';
+import { LayoutDashboard, FileText, Target, User, Settings, HelpCircle, LogOut, Calculator } from 'lucide-react';
 
 const Sidebar = () => {
     const { user, logout } = useContext(AuthContext);
@@ -15,6 +15,7 @@ const Sidebar = () => {
         { path: '/', label: t('dashboard'), icon: LayoutDashboard },
         { path: '/transactions', label: t('transaction_history'), icon: FileText },
         { path: '/goals', label: t('goals'), icon: Target },
+        { path: '/budget-planner', label: t('budget_planner') || 'Budget Planner', icon: Calculator },
         { path: '/profile', label: t('profile'), icon: User },
         { path: '/settings', label: t('settings'), icon: Settings },
         { path: '/about', label: t('help'), icon: HelpCircle },

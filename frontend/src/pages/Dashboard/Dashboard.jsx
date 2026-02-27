@@ -5,13 +5,15 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, Resp
 import { toast } from 'react-toastify';
 import { Mic, MicOff } from 'lucide-react';
 import SmsSimulator from '../../components/SmsSimulator';
+import VoiceBudgetModal from '../../components/VoiceBudgetModal';
 
 const Dashboard = () => {
     const { token } = useContext(AuthContext);
-    const { t } = useContext(LanguageContext);
+    const { t, tVoice, lang } = useContext(LanguageContext);
     const [summary, setSummary] = useState(null);
     const [transactions, setTransactions] = useState([]);
     const [goals, setGoals] = useState([]);
+    const [latestVoicePlan, setLatestVoicePlan] = useState(null);
 
     const [amount, setAmount] = useState('');
     const [type, setType] = useState('expense');
@@ -22,6 +24,7 @@ const Dashboard = () => {
     const [newDomainExpected, setNewDomainExpected] = useState('');
     const [isListening, setIsListening] = useState(false);
     const [smsText, setSmsText] = useState('');
+    const [isVoiceBudgetOpen, setIsVoiceBudgetOpen] = useState(false);
 
     // --- Voice Assistant State Machine ---
     const [voiceState, setVoiceState] = useState({
@@ -34,12 +37,13 @@ const Dashboard = () => {
         lastSpeechText: '',
         lastSpeechTimestamp: 0,
         promptMessage: '',
-        transcript: ''
+        transcript: '',
+        activeLang: 'en'
     });
 
     const VOICE_KEYWORDS = {
-        income: ['income', 'add', 'credit', 'received', 'got', 'earn', 'salary', 'aadaayam', 'aay'],
-        expense: ['expense', 'spend', 'spent', 'debit', 'kharchu', 'kharcha', 'paid', 'pay', 'to']
+        income: ['income', 'add', 'credit', 'received', 'got', 'earn', 'salary', 'aadaayam', 'aay', 'ఆదాయం', 'आय', 'జోడించు', 'जोड़ो'],
+        expense: ['expense', 'spend', 'spent', 'debit', 'kharchu', 'kharcha', 'paid', 'pay', 'to', 'ఖర్చు', 'डబ్బు', 'खर्च', 'पैसा']
     };
 
     // Ref to hold current state for the speech engine closure
@@ -51,9 +55,20 @@ const Dashboard = () => {
     useEffect(() => { summaryRef.current = summary; }, [summary]);
     useEffect(() => { goalsRef.current = goals; }, [goals]);
 
-    const speakVoicePrompt = (text) => {
+    const getVoiceLang = (appLang) => {
+        switch (appLang) {
+            case 'te': return 'te-IN';
+            case 'hi': return 'hi-IN';
+            case 'en':
+            default: return 'en-IN';
+        }
+    };
+
+    const speakVoicePrompt = (langCode, key, ...args) => {
+        const text = tVoice(langCode, key, ...args);
         setVoiceState(prev => ({ ...prev, promptMessage: text, transcript: '' }));
         const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = getVoiceLang(langCode);
         window.speechSynthesis.speak(utterance);
     };
 
@@ -68,7 +83,8 @@ const Dashboard = () => {
             lastSpeechText: '',
             lastSpeechTimestamp: 0,
             promptMessage: '',
-            transcript: ''
+            transcript: '',
+            activeLang: 'en'
         });
     };
 
@@ -83,11 +99,25 @@ const Dashboard = () => {
             return;
         }
 
+        let detectedLang = vState.activeLang || 'en';
+        if (vState.stage === 'idle') {
+            const teluguKeywords = ['ఆదాయం', 'ఖర్చు', 'డబ్బు', 'జోడించు'];
+            const hindiKeywords = ['आय', 'खर्च', 'पैसा', 'जोड़ो'];
+            let currentDetected = 'en';
+            if (teluguKeywords.some(k => speechResult.includes(k))) currentDetected = 'te';
+            else if (hindiKeywords.some(k => speechResult.includes(k))) currentDetected = 'hi';
+
+            detectedLang = lang !== 'en' ? lang : currentDetected;
+        } else {
+            detectedLang = lang !== 'en' ? lang : vState.activeLang;
+        }
+
         setVoiceState(prev => ({
             ...prev,
             transcript: speechResult,
             lastSpeechText: speechResult,
-            lastSpeechTimestamp: now
+            lastSpeechTimestamp: now,
+            activeLang: detectedLang
         }));
 
         let amount = vState.pendingAmount;
@@ -118,25 +148,25 @@ const Dashboard = () => {
         // Logic based on current stage
         if (vState.stage === 'idle') {
             if (!amount || amount <= 0) {
-                speakVoicePrompt(t('voice_prompt_amount'));
+                speakVoicePrompt(detectedLang, 'voice_prompt_amount');
                 setVoiceState(prev => ({ ...prev, stage: 'askingAmount', pendingType: type, pendingDomainId: domainId }));
                 return;
             }
 
             if (!type) {
-                speakVoicePrompt(t('voice_prompt_type'));
+                speakVoicePrompt(detectedLang, 'voice_strict_type');
                 setVoiceState(prev => ({ ...prev, stage: 'askingType', pendingAmount: amount, pendingDomainId: domainId }));
                 return;
             }
 
             if (type === 'expense' && !domainId) {
-                speakVoicePrompt(t('voice_prompt_category', amount));
+                speakVoicePrompt(detectedLang, 'voice_strict_domain');
                 setVoiceState(prev => ({ ...prev, stage: 'askingCategory', pendingAmount: amount, pendingType: type }));
                 return;
             }
 
             if (type === 'income' && currentGoals && currentGoals.length > 0) {
-                speakVoicePrompt(t('voice_prompt_goal'));
+                speakVoicePrompt(detectedLang, 'voice_prompt_goal');
                 setVoiceState(prev => ({ ...prev, stage: 'askingGoal', pendingAmount: amount, pendingType: type }));
                 return;
             }
@@ -148,21 +178,21 @@ const Dashboard = () => {
 
         if (vState.stage === 'askingAmount') {
             if (!amount || amount <= 0) {
-                speakVoicePrompt(t('voice_prompt_valid_amount'));
+                speakVoicePrompt(detectedLang, 'voice_prompt_valid_amount');
                 return;
             }
             if (!type) {
-                speakVoicePrompt(t('voice_prompt_type'));
+                speakVoicePrompt(detectedLang, 'voice_strict_type');
                 setVoiceState(prev => ({ ...prev, stage: 'askingType', pendingAmount: amount, pendingDomainId: domainId }));
                 return;
             }
             if (type === 'expense' && !domainId) {
-                speakVoicePrompt(t('voice_prompt_category', amount));
+                speakVoicePrompt(detectedLang, 'voice_strict_domain');
                 setVoiceState(prev => ({ ...prev, stage: 'askingCategory', pendingAmount: amount, pendingType: type }));
                 return;
             }
             if (type === 'income' && currentGoals && currentGoals.length > 0) {
-                speakVoicePrompt(t('voice_prompt_goal'));
+                speakVoicePrompt(detectedLang, 'voice_prompt_goal');
                 setVoiceState(prev => ({ ...prev, stage: 'askingGoal', pendingAmount: amount, pendingType: type }));
                 return;
             }
@@ -172,16 +202,16 @@ const Dashboard = () => {
 
         if (vState.stage === 'askingType') {
             if (!type) {
-                speakVoicePrompt(t('voice_prompt_not_catch'));
+                speakVoicePrompt(detectedLang, 'voice_prompt_not_catch');
                 return;
             }
             if (type === 'expense' && !domainId) {
-                speakVoicePrompt(t('voice_prompt_category', amount));
+                speakVoicePrompt(detectedLang, 'voice_strict_domain');
                 setVoiceState(prev => ({ ...prev, stage: 'askingCategory', pendingAmount: amount, pendingType: type }));
                 return;
             }
             if (type === 'income' && currentGoals && currentGoals.length > 0) {
-                speakVoicePrompt(t('voice_prompt_goal'));
+                speakVoicePrompt(detectedLang, 'voice_prompt_goal');
                 setVoiceState(prev => ({ ...prev, stage: 'askingGoal', pendingAmount: amount, pendingType: type }));
                 return;
             }
@@ -192,7 +222,7 @@ const Dashboard = () => {
 
         if (vState.stage === 'askingCategory') {
             if (!domainId) {
-                speakVoicePrompt(t('voice_prompt_no_category'));
+                speakVoicePrompt(detectedLang, 'voice_prompt_no_category');
                 return;
             }
             await submitVoiceTransaction(amount, type, domainId, null, "Added via voice dialogue");
@@ -209,7 +239,7 @@ const Dashboard = () => {
                 await submitVoiceTransaction(amount, type, null, foundGoal.id, "Added to goal via voice");
                 return;
             }
-            speakVoicePrompt(t('voice_prompt_no_goal'));
+            speakVoicePrompt(detectedLang, 'voice_prompt_no_goal');
             return;
         }
     };
@@ -219,7 +249,7 @@ const Dashboard = () => {
             if (finalType === 'expense' && finalDomainId) {
                 speakBudgetFeedback(finalDomainId, finalAmount);
             } else {
-                speakVoicePrompt(`${finalAmount} rupees added to ${finalType}.`);
+                speakVoicePrompt(voiceStateRef.current.activeLang || lang, 'voice_strict_success', finalAmount);
             }
 
             const res = await fetch('http://localhost:5000/api/finance/transactions', {
@@ -249,16 +279,14 @@ const Dashboard = () => {
         const newSpent = domain.spent_amount + Number(addedAmount);
         const usagePercentage = Math.round((newSpent / domain.expected_amount) * 100);
 
-        let message = "";
-        if (usagePercentage < 100) {
-            message = t('approaching_limit') + ` ${usagePercentage}%`;
-        } else if (usagePercentage === 100) {
-            message = t('full_budget_used');
-        } else {
-            message = t('over_budget');
-        }
+        let detectedLang = voiceStateRef.current?.activeLang || lang;
+
+        const part1 = tVoice(detectedLang, 'voice_strict_monthly_budget', domain.expected_amount.toString());
+        const part2 = tVoice(detectedLang, 'voice_strict_budget_used', usagePercentage.toString());
+        const message = `${part1} ${part2}`;
 
         const utterance = new SpeechSynthesisUtterance(message);
+        utterance.lang = getVoiceLang(detectedLang);
         window.speechSynthesis.speak(utterance);
     };
 
@@ -362,7 +390,7 @@ const Dashboard = () => {
         recognition.maxAlternatives = 1;
 
         recognition.onstart = () => {
-            setVoiceState(prev => ({ ...prev, isActive: true, promptMessage: "Listening... Speak a transaction." }));
+            setVoiceState(prev => ({ ...prev, isActive: true, promptMessage: t('voice_listening') }));
             setIsListening(true);
         };
 
@@ -399,14 +427,16 @@ const Dashboard = () => {
 
     const fetchData = async () => {
         try {
-            const [sumRes, transRes, goalsRes] = await Promise.all([
+            const [sumRes, transRes, goalsRes, voicePlanRes] = await Promise.all([
                 fetch('http://localhost:5000/api/finance/summary', { headers: { 'Authorization': `Bearer ${token}` } }),
                 fetch('http://localhost:5000/api/finance/transactions', { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch('http://localhost:5000/api/goals', { headers: { 'Authorization': `Bearer ${token}` } })
+                fetch('http://localhost:5000/api/goals', { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('http://localhost:5000/api/finance/voice-plan/latest', { headers: { 'Authorization': `Bearer ${token}` } })
             ]);
             if (sumRes.ok) setSummary(await sumRes.json());
             if (transRes.ok) setTransactions(await transRes.json());
             if (goalsRes.ok) setGoals(await goalsRes.json());
+            if (voicePlanRes.ok) setLatestVoicePlan(await voicePlanRes.json());
         } catch (err) {
             toast.error('Failed to fetch dashboard data');
         }
@@ -483,8 +513,24 @@ const Dashboard = () => {
     const netDaily = todayIncome - todayExpense;
 
     let dailyColor = 'bg-emerald-500 text-white';
-    if (netDaily < 0) dailyColor = 'bg-red-500 text-white';
-    else if (netDaily > 50) dailyColor = 'bg-emerald-700 text-white';
+    let trackerMessage = netDaily < 0 ? t('below_goal') : netDaily > 50 ? t('great_savings') : t('met_goal');
+
+    if (latestVoicePlan) {
+        const dailyAllowed = latestVoicePlan.generatedPlan.dailyAllowed;
+        if (todayExpense > dailyAllowed) {
+            dailyColor = 'bg-red-500 text-white';
+            trackerMessage = 'Over Budget Limit';
+        } else if (todayExpense >= dailyAllowed * 0.8) {
+            dailyColor = 'bg-emerald-400 text-white'; // Light Green
+            trackerMessage = 'Near Budget Limit';
+        } else {
+            dailyColor = 'bg-emerald-600 text-white'; // Dark Green
+            trackerMessage = 'Under Spending Limit';
+        }
+    } else {
+        if (netDaily < 0) dailyColor = 'bg-red-500 text-white';
+        else if (netDaily > 50) dailyColor = 'bg-emerald-700 text-white';
+    }
 
     // 📈 Goal Prediction Logic
     let primaryGoal = null;
@@ -569,10 +615,15 @@ const Dashboard = () => {
                 </div>
 
                 <div className="card text-center flex flex-col justify-center items-center">
-                    <h3 className="text-gray-500 dark:text-gray-400 font-medium mb-2">{t('net_daily')}</h3>
-                    <p className="text-4xl font-black text-gray-900 dark:text-white mb-3">${netDaily.toFixed(2)}</p>
+                    <h3 className="text-gray-500 dark:text-gray-400 font-medium mb-2">
+                        {latestVoicePlan ? 'Daily Budget Used' : t('net_daily')}
+                    </h3>
+                    <p className={`text-4xl font-black ${latestVoicePlan && todayExpense > latestVoicePlan.generatedPlan.dailyAllowed ? 'text-red-500' : 'text-gray-900 dark:text-white'} mb-3`}>
+                        ${latestVoicePlan ? todayExpense.toFixed(2) : netDaily.toFixed(2)}
+                        {latestVoicePlan && <span className="text-lg text-gray-400 font-medium"> / {latestVoicePlan.generatedPlan.dailyAllowed}</span>}
+                    </p>
                     <span className={`px-4 py-1 rounded-full text-sm font-semibold shadow-sm ${dailyColor}`}>
-                        {netDaily < 0 ? t('below_goal') : netDaily > 50 ? t('great_savings') : t('met_goal')}
+                        {trackerMessage}
                     </span>
                 </div>
 
@@ -865,6 +916,14 @@ const Dashboard = () => {
                     </table>
                 </div>
             </div>
+            <VoiceBudgetModal
+                isOpen={isVoiceBudgetOpen}
+                onClose={() => setIsVoiceBudgetOpen(false)}
+                onPlanSaved={() => {
+                    setIsVoiceBudgetOpen(false);
+                    fetchData();
+                }}
+            />
         </div>
     );
 };

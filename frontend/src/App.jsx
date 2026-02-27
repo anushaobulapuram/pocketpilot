@@ -14,6 +14,7 @@ import GoalSetup from './pages/Goals/GoalSetup';
 import Profile from './pages/Profile/Profile';
 import Settings from './pages/Settings/Settings';
 import About from './pages/Help/About';
+import BudgetPlanner from './pages/BudgetPlanner/BudgetPlanner';
 import Sidebar from './components/Sidebar';
 import Navbar from './components/Navbar';
 
@@ -40,6 +41,7 @@ function AppContent() {
               <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/transactions" element={<ProtectedRoute><Transactions /></ProtectedRoute>} />
               <Route path="/goals" element={<ProtectedRoute><GoalSetup /></ProtectedRoute>} />
+              <Route path="/budget-planner" element={<ProtectedRoute><BudgetPlanner /></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
               <Route path="/about" element={<ProtectedRoute><About /></ProtectedRoute>} />

@@ -4,6 +4,8 @@ const Domain = require('../models/Domain');
 const Transaction = require('../models/Transaction');
 const Goal = require('../models/Goal');
 const DailySavings = require('../models/DailySavings');
+const BudgetPlan = require('../models/BudgetPlan');
+const VoicePlan = require('../models/VoicePlan');
 const authenticate = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -257,6 +259,67 @@ router.get('/daily-history', authenticate, async (req, res) => {
         res.json(history);
     } catch (err) {
         console.error("Daily History Error:", err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Budget Plans
+router.post('/budget-plan', authenticate, async (req, res) => {
+    const { totalBudget, days, domains, planBreakdown } = req.body;
+
+    if (!totalBudget || !days || !domains || !planBreakdown) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    try {
+        const newPlan = new BudgetPlan({
+            user: req.user.id,
+            totalBudget,
+            days,
+            domains,
+            planBreakdown
+        });
+        await newPlan.save();
+        res.status(201).json({ id: newPlan._id, message: 'Budget plan saved successfully' });
+    } catch (err) {
+        console.error("Budget Plan Save Error:", err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Voice Plans
+router.post('/voice-plan', authenticate, async (req, res) => {
+    const { originalText, parsedAmount, parsedDuration, generatedPlan } = req.body;
+
+    if (!originalText || !parsedAmount || !parsedDuration || !generatedPlan) {
+        return res.status(400).json({ error: 'Missing required voice plan fields' });
+    }
+
+    try {
+        const newVoicePlan = new VoicePlan({
+            userId: req.user.id,
+            originalText,
+            parsedAmount,
+            parsedDuration,
+            generatedPlan
+        });
+        await newVoicePlan.save();
+        res.status(201).json({ id: newVoicePlan._id, message: 'Voice plan saved successfully' });
+    } catch (err) {
+        console.error("Voice Plan Save Error:", err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+router.get('/voice-plan/latest', authenticate, async (req, res) => {
+    try {
+        const latestPlan = await VoicePlan.findOne({ userId: req.user.id }).sort({ createdAt: -1 });
+        if (!latestPlan) {
+            return res.status(404).json({ message: 'No plans found' });
+        }
+        res.json(latestPlan);
+    } catch (err) {
+        console.error("Voice Plan Fetch Error:", err);
         res.status(500).json({ error: 'Server error' });
     }
 });
